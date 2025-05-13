@@ -1,0 +1,20 @@
+---
+/* @jsxImportSource astro */
+import type { RichText } from "@/lib/interfaces.ts";
+
+export interface Props {
+	richText: RichText;
+}
+
+const { richText } = Astro.props;
+---
+
+{
+	richText.Annotation.Bold ? (
+		<strong class="font-semibold">
+			<slot />
+		</strong>
+	) : (
+		<slot />
+	)
+}

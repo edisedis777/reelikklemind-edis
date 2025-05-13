@@ -1,0 +1,97 @@
+---
+import * as interfaces from "@/lib/interfaces.ts";
+import {
+	isTweetURL,
+	isTikTokURL,
+	isInstagramURL,
+	isPinterestURL,
+	isCodePenURL,
+	isSpotifyURL,
+	isGoogleMapsURL,
+	isEmbeddableURL,
+	isBlueskyAppURL,
+	isNotionEmbedURL,
+} from "@/lib/blog-helpers.ts";
+import Caption from "@/components/notion-blocks/Caption.astro";
+
+import Bookmark from "@/components/notion-blocks/embeds/Bookmark.astro";
+import TweetEmbed from "@/components/notion-blocks/embeds/TweetEmbed.astro";
+import TikTokEmbed from "@/components/notion-blocks/embeds/TikTokEmbed.astro";
+import InstagramEmbed from "@/components/notion-blocks/embeds/InstagramEmbed.astro";
+import PinterestEmbed from "@/components/notion-blocks/embeds/PinterestEmbed.astro";
+import CodePenEmbed from "@/components/notion-blocks/embeds/CodePenEmbed.astro";
+import EmbedGeneric from "@/components/notion-blocks/embeds/EmbedGeneric.astro";
+import SpotifyEmbed from "@/components/notion-blocks/embeds/SpotifyEmbed.astro";
+import GoogleMapsEmbed from "@/components/notion-blocks/embeds/GoogleMapsEmbed.astro";
+import BlueskyEmbed from "@/components/notion-blocks/embeds/BlueskyEmbed.astro";
+import NotionEmbed from "@/components/notion-blocks/embeds/NotionEmbed.astro";
+
+export interface Props {
+	block: interfaces.Block;
+	urlMap: { [key: string]: string };
+	setId?: boolean;
+}
+const { block, urlMap, setId = true } = Astro.props;
+let url: URL;
+try {
+	url = new URL(block.Embed.Url);
+} catch (err) {
+	console.log(err);
+}
+
+// Helper function to transform known URLs to their embeddable versions.
+function transformEmbedUrl(url: URL): URL {
+	// Check if the URL is a GitHub Gist URL.
+	if (url.hostname === "gist.github.com") {
+		// If it doesn't already have the embeddable extension, add ".pibb?scroll=true"
+		if (!url.pathname.endsWith(".pibb")) {
+			return new URL(url.toString() + ".pibb"); //height is automatically cropped to be fixed, so we do not need to set ?scroll=true
+		}
+	}
+	return url;
+}
+
+// Apply transformation for known embeddable URLs (currently only gist)
+if (url) {
+	url = transformEmbedUrl(url);
+}
+
+const plainTextCaption = block.Embed?.Caption.map((richText) => richText.PlainText).join(" ");
+---
+
+<div class="embedded-info max-w-full pb-2" id={setId ? block.Id : undefined}>
+	{
+		url ? (
+			isTweetURL(url) ? (
+				<TweetEmbed url={url} />
+			) : isBlueskyAppURL(url) ? (
+				<BlueskyEmbed url={url} />
+			) : isTikTokURL(url) ? (
+				<TikTokEmbed url={url} caption={plainTextCaption} />
+			) : isInstagramURL(url) ? (
+				<InstagramEmbed url={url} caption={plainTextCaption} />
+			) : isPinterestURL(url) ? (
+				<PinterestEmbed url={url} caption={plainTextCaption} />
+			) : isCodePenURL(url) ? (
+				<CodePenEmbed url={url} caption={plainTextCaption} />
+			) : isSpotifyURL(url) ? (
+				<SpotifyEmbed url={url} caption={plainTextCaption} />
+			) : isGoogleMapsURL(url) ? (
+				<GoogleMapsEmbed url={url} caption={plainTextCaption} />
+			) : isNotionEmbedURL(url) ? (
+				<NotionEmbed url={url} caption={plainTextCaption} />
+			) : (await isEmbeddableURL(url)) ? (
+				<EmbedGeneric url={url} caption={plainTextCaption} />
+			) : (
+				<Bookmark block={block} urlMap={urlMap} />
+			)
+		) : null
+	}
+	<Caption richTexts={block.Embed?.Caption} block={block} />
+</div>
+
+<style>
+	#instagram-embed-0 {
+		min-width: unset !important;
+	}
+</style>

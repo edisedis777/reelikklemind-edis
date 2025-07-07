@@ -198,7 +198,7 @@ jobs:
 
       - name: Create CNAME file
         run: |
-          echo "www.reelikklemind.com" > dist/CNAME
+          echo "www.tmfnk.com" > dist/CNAME
         working-directory: ${{ env.BUILD_PATH }}
 
       - name: Clear Previous `tmp` and `public` Cache (if needed)

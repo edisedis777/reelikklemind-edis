@@ -160,8 +160,12 @@ export async function getAllEntries(): Promise<Post[]> {
 					return (await client.databases.query(
 						params as any, // eslint-disable-line @typescript-eslint/no-explicit-any
 					)) as responses.QueryDatabaseResponse;
-				} catch (error: unknown) {
+				} catch (error: any) {
 					if (error instanceof APIResponseError) {
+						if (error.code === "object_not_found") {
+							console.warn(`Block not found: ${params.block_id}`);
+							return { results: [], has_more: false };
+						}
 						if (error.status && error.status >= 400 && error.status < 500) {
 							bail(error);
 						}

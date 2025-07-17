@@ -34,7 +34,7 @@ jobs:
       - name: Clear Previous Node Modules Cache (if needed)
         if: env.DELETE_CACHES_GH_TOKEN != ''
         run: |
-          gh cache list --key modules- --json key --jq '.[].key' | xargs -I {} gh cache delete {}
+          gh cache list --key modules- --json key --jq '.[].key' | xargs -I {} gh cache delete {} || true
         env:
           GH_TOKEN: ${{ env.DELETE_CACHES_GH_TOKEN }}
 

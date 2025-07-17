@@ -163,7 +163,7 @@ export async function getAllEntries(): Promise<Post[]> {
 				} catch (error: any) {
 					if (error instanceof APIResponseError) {
 						if (error.code === "object_not_found") {
-							console.warn(`Block not found: ${params.block_id}`);
+							console.warn(`Database not found: ${params.database_id}`);
 							return { results: [], has_more: false };
 						}
 						if (error.status && error.status >= 400 && error.status < 500) {
@@ -196,7 +196,19 @@ export async function getAllEntries(): Promise<Post[]> {
 	allEntriesCache = allEntriesCache.sort(
 		(a, b) => new Date(b.Date).getTime() - new Date(a.Date).getTime(),
 	);
-	//console.log("posts Cache", postsCache);
+
+	// Validate entries have content
+	const validEntries: Post[] = [];
+	for (const post of allEntriesCache) {
+		const content = await getPostContentByPostId(post);
+		if (content) {
+			validEntries.push(post);
+		} else {
+			console.warn(`Skipping entry ${post.PageId} (${post.Slug}) due to missing content`);
+		}
+	}
+
+	allEntriesCache = validEntries;
 	saveBuildcache("allEntries.json", allEntriesCache);
 	return allEntriesCache;
 }
@@ -223,7 +235,7 @@ export async function getPostByPageId(pageId: string): Promise<Post | null> {
 
 export async function getPostContentByPostId(
 	post: Post,
-): Promise<{ blocks: Block[]; referencesInPage: ReferencesInPage[] | null }> {
+): Promise<{ blocks: Block[]; referencesInPage: ReferencesInPage[] | null } | null> {
 	const tmpDir = BUILD_FOLDER_PATHS["blocksJson"];
 	const cacheFilePath = path.join(tmpDir, `${post.PageId}.json`);
 	const cacheReferencesInPageFilePath = path.join(
@@ -254,6 +266,10 @@ export async function getPostContentByPostId(
 	} else {
 		// If the post was updated after the last build or cache does not exist, fetch new data
 		blocks = await getAllBlocksByBlockId(post.PageId);
+		if (blocks.length === 0) {
+			console.warn(`No content found for post ${post.PageId} (${post.Slug})`);
+			return null; // Skip this post
+		}
 		// Write the new data to the cache file
 		fs.writeFileSync(cacheFilePath, superjson.stringify(blocks), "utf-8");
 		referencesInPage = extractReferencesInPage(post.PageId, blocks);
@@ -306,7 +322,7 @@ export function createReferencesToThisEntry(
 			referencesInPage.forEach((reference) => {
 				// Check and collect blocks where InternalHref.PageId matches an entryId in the map
 				reference.other_pages.forEach((richText) => {
-					if (richText.InternalHref?.PageId && entryReferencesMap[richText.InternalHref.PageId]) {
+					if (richText.InternalHref?.PageId && entryReferencesMap[richText.InternalHref?.PageId]) {
 						entryReferencesMap[richText.InternalHref.PageId].push({
 							entryId: entryId,
 							block: reference.block,
@@ -341,80 +357,97 @@ export function createReferencesToThisEntry(
 }
 
 export async function getAllBlocksByBlockId(blockId: string): Promise<Block[]> {
-	let results: responses.BlockObject[] = [];
+	try {
+		let results: responses.BlockObject[] = [];
 
-	const params: requestParams.RetrieveBlockChildren = {
-		block_id: blockId,
-	};
+		const params: requestParams.RetrieveBlockChildren = {
+			block_id: blockId,
+		};
 
-	// eslint-disable-next-line no-constant-condition
-	while (true) {
-		const res = await retry(
-			async (bail) => {
-				try {
-					return (await client.blocks.children.list(
-						params as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-					)) as responses.RetrieveBlockChildrenResponse;
-				} catch (error: unknown) {
-					if (error instanceof APIResponseError) {
-						if (error.status && error.status >= 400 && error.status < 500) {
-							bail(error);
+		// eslint-disable-next-line no-constant-condition
+		while (true) {
+			const res = await retry(
+				async (bail) => {
+					try {
+						return (await client.blocks.children.list(
+							params as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+						)) as responses.RetrieveBlockChildrenResponse;
+					} catch (error: unknown) {
+						if (error instanceof APIResponseError) {
+							if (error.code === "object_not_found") {
+								console.warn(`Block ${blockId} not found or not shared with integration`);
+								return { results: [], has_more: false }; // Return empty results to skip
+							}
+							if (error.status && error.status >= 400 && error.status < 500) {
+								bail(error);
+							}
 						}
+						throw error;
 					}
-					throw error;
-				}
-			},
-			{
-				retries: numberOfRetry,
-				minTimeout: minTimeout,
-				factor: factor,
-			},
-		);
+				},
+				{
+					retries: numberOfRetry,
+					minTimeout: minTimeout,
+					factor: factor,
+				},
+			);
 
-		results = results.concat(res.results);
+			results = results.concat(res.results);
 
-		if (!res.has_more) {
-			break;
+			if (!res.has_more) {
+				break;
+			}
+
+			params["start_cursor"] = res.next_cursor as string;
 		}
 
-		params["start_cursor"] = res.next_cursor as string;
-	}
+		const allBlocks = results.map((blockObject) => _buildBlock(blockObject));
 
-	const allBlocks = results.map((blockObject) => _buildBlock(blockObject));
+		for (let i = 0; i < allBlocks.length; i++) {
+			const block = allBlocks[i];
 
-	for (let i = 0; i < allBlocks.length; i++) {
-		const block = allBlocks[i];
-
-		if (block.Type === "table" && block.Table) {
-			block.Table.Rows = await _getTableRows(block.Id);
-		} else if (block.Type === "column_list" && block.ColumnList) {
-			block.ColumnList.Columns = await _getColumns(block.Id);
-		} else if (block.Type === "bulleted_list_item" && block.BulletedListItem && block.HasChildren) {
-			block.BulletedListItem.Children = await getAllBlocksByBlockId(block.Id);
-		} else if (block.Type === "numbered_list_item" && block.NumberedListItem && block.HasChildren) {
-			block.NumberedListItem.Children = await getAllBlocksByBlockId(block.Id);
-		} else if (block.Type === "to_do" && block.ToDo && block.HasChildren) {
-			block.ToDo.Children = await getAllBlocksByBlockId(block.Id);
-		} else if (block.Type === "synced_block" && block.SyncedBlock) {
-			block.SyncedBlock.Children = await _getSyncedBlockChildren(block);
-		} else if (block.Type === "toggle" && block.Toggle) {
-			block.Toggle.Children = await getAllBlocksByBlockId(block.Id);
-		} else if (block.Type === "paragraph" && block.Paragraph && block.HasChildren) {
-			block.Paragraph.Children = await getAllBlocksByBlockId(block.Id);
-		} else if (block.Type === "heading_1" && block.Heading1 && block.HasChildren) {
-			block.Heading1.Children = await getAllBlocksByBlockId(block.Id);
-		} else if (block.Type === "heading_2" && block.Heading2 && block.HasChildren) {
-			block.Heading2.Children = await getAllBlocksByBlockId(block.Id);
-		} else if (block.Type === "heading_3" && block.Heading3 && block.HasChildren) {
-			block.Heading3.Children = await getAllBlocksByBlockId(block.Id);
-		} else if (block.Type === "quote" && block.Quote && block.HasChildren) {
-			block.Quote.Children = await getAllBlocksByBlockId(block.Id);
-		} else if (block.Type === "callout" && block.Callout && block.HasChildren) {
-			block.Callout.Children = await getAllBlocksByBlockId(block.Id);
+			if (block.Type === "table" && block.Table) {
+				block.Table.Rows = await _getTableRows(block.Id);
+			} else if (block.Type === "column_list" && block.ColumnList) {
+				block.ColumnList.Columns = await _getColumns(block.Id);
+			} else if (
+				block.Type === "bulleted_list_item" &&
+				block.BulletedListItem &&
+				block.HasChildren
+			) {
+				block.BulletedListItem.Children = await getAllBlocksByBlockId(block.Id);
+			} else if (
+				block.Type === "numbered_list_item" &&
+				block.NumberedListItem &&
+				block.HasChildren
+			) {
+				block.NumberedListItem.Children = await getAllBlocksByBlockId(block.Id);
+			} else if (block.Type === "to_do" && block.ToDo && block.HasChildren) {
+				block.ToDo.Children = await getAllBlocksByBlockId(block.Id);
+			} else if (block.Type === "synced_block" && block.SyncedBlock) {
+				block.SyncedBlock.Children = await _getSyncedBlockChildren(block);
+			} else if (block.Type === "toggle" && block.Toggle) {
+				block.Toggle.Children = await getAllBlocksByBlockId(block.Id);
+			} else if (block.Type === "paragraph" && block.Paragraph && block.HasChildren) {
+				block.Paragraph.Children = await getAllBlocksByBlockId(block.Id);
+			} else if (block.Type === "heading_1" && block.Heading1 && block.HasChildren) {
+				block.Heading1.Children = await getAllBlocksByBlockId(block.Id);
+			} else if (block.Type === "heading_2" && block.Heading2 && block.HasChildren) {
+				block.Heading2.Children = await getAllBlocksByBlockId(block.Id);
+			} else if (block.Type === "heading_3" && block.Heading3 && block.HasChildren) {
+				block.Heading3.Children = await getAllBlocksByBlockId(block.Id);
+			} else if (block.Type === "quote" && block.Quote && block.HasChildren) {
+				block.Quote.Children = await getAllBlocksByBlockId(block.Id);
+			} else if (block.Type === "callout" && block.Callout && block.HasChildren) {
+				block.Callout.Children = await getAllBlocksByBlockId(block.Id);
+			}
 		}
-	}
 
-	return allBlocks;
+		return allBlocks;
+	} catch (error: unknown) {
+		console.error(`Failed to fetch blocks for blockId ${blockId}:`, error);
+		return []; // Return empty array on any unexpected error
+	}
 }
 
 export async function getBlock(blockId: string): Promise<Block | null> {
@@ -904,7 +937,7 @@ function _buildBlock(blockObject: responses.BlockObject): Block {
 				};
 				if (blockObject.image.type === "external" && blockObject.image.external) {
 					image.External = { Url: blockObject.image.external.url };
-				} else if (blockObject.image.type === "file" && blockObject.image.file) {
+				} else if (blockObject.image.type === "file" && checkObject.image.file) {
 					image.File = {
 						Type: blockObject.image.type,
 						Url: blockObject.image.file.url,

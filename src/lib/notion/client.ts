@@ -95,8 +95,6 @@ const numberOfRetry = 2;
 const minTimeout = 1000; // waits 1 second before the first retry
 const factor = 2; // doubles the wait time with each retry
 
-type QueryFilters = requestParams.CompoundFilterObject;
-
 export async function getAllEntries(): Promise<Post[]> {
 	if (allEntriesCache !== null) {
 		return allEntriesCache;
@@ -108,8 +106,6 @@ export async function getAllEntries(): Promise<Post[]> {
 	}
 
 	// console.log("Did not find cache for getAllEntries");
-
-	const queryFilters: QueryFilters = {};
 
 	const params: requestParams.QueryDatabase = {
 		database_id: DATABASE_ID,
@@ -137,10 +133,7 @@ export async function getAllEntries(): Promise<Post[]> {
 						},
 					},
 				},
-
-				...(queryFilters?.and || []),
 			],
-			or: queryFilters?.or || undefined,
 		},
 		sorts: [
 			{
@@ -158,13 +151,13 @@ export async function getAllEntries(): Promise<Post[]> {
 			async (bail) => {
 				try {
 					return (await client.databases.query(
-						params as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+						params as unknown as Parameters<typeof client.databases.query>[0],
 					)) as responses.QueryDatabaseResponse;
-				} catch (error: any) {
+				} catch (error: unknown) {
 					if (error instanceof APIResponseError) {
 						if (error.code === "object_not_found") {
 							console.warn(`Database not found: ${params.database_id}`);
-							return { results: [], has_more: false };
+							return { results: [], has_more: false, next_cursor: null };
 						}
 						if (error.status && error.status >= 400 && error.status < 500) {
 							bail(error);
@@ -186,7 +179,9 @@ export async function getAllEntries(): Promise<Post[]> {
 			break;
 		}
 
-		params["start_cursor"] = res.next_cursor as string;
+		if (res.next_cursor) {
+			params["start_cursor"] = res.next_cursor;
+		}
 	}
 
 	allEntriesCache = results
@@ -243,7 +238,9 @@ export async function getPostContentByPostId(
 		`${post.PageId}.json`,
 	);
 	const isPostUpdatedAfterLastBuild = LAST_BUILD_TIME
-		? post.LastUpdatedTimeStamp > LAST_BUILD_TIME
+		? post.LastUpdatedTimeStamp && LAST_BUILD_TIME
+			? post.LastUpdatedTimeStamp > LAST_BUILD_TIME
+			: true
 		: true;
 
 	let blocks: Block[];
@@ -293,10 +290,14 @@ function updateBlockIdPostIdMap(postId: string, blocks: Block[]) {
 	}
 
 	blocks.forEach((block) => {
-		blockIdPostIdMap[formatUUID(block.Id)] = formatUUID(postId);
+		if (blockIdPostIdMap) {
+			blockIdPostIdMap[formatUUID(block.Id)] = formatUUID(postId);
+		}
 	});
 
-	saveBuildcache("blockIdPostIdMap.json", blockIdPostIdMap);
+	if (blockIdPostIdMap) {
+		saveBuildcache("blockIdPostIdMap.json", blockIdPostIdMap);
+	}
 }
 
 export function getBlockIdPostIdMap(): { [key: string]: string } {
@@ -370,13 +371,13 @@ export async function getAllBlocksByBlockId(blockId: string): Promise<Block[]> {
 				async (bail) => {
 					try {
 						return (await client.blocks.children.list(
-							params as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+							params as unknown as Parameters<typeof client.blocks.children.list>[0],
 						)) as responses.RetrieveBlockChildrenResponse;
 					} catch (error: unknown) {
 						if (error instanceof APIResponseError) {
 							if (error.code === "object_not_found") {
 								console.warn(`Block ${blockId} not found or not shared with integration`);
-								return { results: [], has_more: false }; // Return empty results to skip
+								return { results: [], has_more: false, next_cursor: null }; // Return empty results to skip
 							}
 							if (error.status && error.status >= 400 && error.status < 500) {
 								bail(error);
@@ -398,7 +399,9 @@ export async function getAllBlocksByBlockId(blockId: string): Promise<Block[]> {
 				break;
 			}
 
-			params["start_cursor"] = res.next_cursor as string;
+			if (res.next_cursor) {
+				params["start_cursor"] = res.next_cursor;
+			}
 		}
 
 		const allBlocks = results.map((blockObject) => _buildBlock(blockObject));
@@ -480,7 +483,7 @@ export async function getBlock(blockId: string): Promise<Block | null> {
 			async (bail) => {
 				try {
 					return (await client.blocks.retrieve(
-						params as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+						params as unknown as Parameters<typeof client.blocks.retrieve>[0],
 					)) as responses.RetrieveBlockResponse;
 				} catch (error: unknown) {
 					if (error instanceof APIResponseError) {
@@ -498,7 +501,7 @@ export async function getBlock(blockId: string): Promise<Block | null> {
 			},
 		);
 
-		const block = _buildBlock(res);
+		const block = _buildBlock(res as responses.BlockObject);
 
 		// Update our mapping and cache with this new block
 		if (!postId) {
@@ -546,10 +549,13 @@ export async function getAllTagsWithCounts(): Promise<
 	const { propertiesRaw } = await getDatabase();
 	const options = propertiesRaw.Tags?.multi_select?.options || [];
 
-	const tagsNameWDesc = options.reduce((acc, option) => {
-		acc[option.name] = option.description || "";
-		return acc;
-	}, {});
+	const tagsNameWDesc = options.reduce(
+		(acc, option) => {
+			acc[option.name] = option.description || "";
+			return acc;
+		},
+		{} as Record<string, string>,
+	);
 	const tagCounts: Record<string, { count: number; description: string; color: string }> = {};
 
 	filteredPosts.forEach((post) => {
@@ -624,7 +630,7 @@ export async function downloadFile(
 	isFavicon: boolean = false,
 ) {
 	optimize_img = optimize_img ? OPTIMIZE_IMAGES : optimize_img;
-	let res!: AxiosResponse;
+	let res: AxiosResponse;
 	try {
 		res = await axios({
 			method: "get",
@@ -632,7 +638,7 @@ export async function downloadFile(
 			timeout: 10000,
 			responseType: "stream",
 		});
-	} catch (err) {
+	} catch (err: any) {
 		console.log(err);
 		return Promise.resolve();
 	}
@@ -686,7 +692,7 @@ export async function downloadFile(
 					.webp({ quality: 80 }),
 			) // Adjust quality as needed
 			.toFile(webpPath)
-			.catch((err) => {
+			.catch((err: any) => {
 				console.error("Error processing image:", err);
 			});
 	} else {
@@ -694,24 +700,23 @@ export async function downloadFile(
 		const writeStream = fs.createWriteStream(filepath);
 		stream.pipe(new ExifTransformer()).pipe(writeStream);
 
-		const writeStreamPromise = new Promise<void>((resolve) => {
+		const writeStreamPromise = new Promise<void>((resolve, reject) => {
 			// After the file is written, check if favicon processing is needed
 			writeStream.on("finish", async () => {
 				if (isFavicon) {
-					const fav = await processFavicon(filepath);
+					await processFavicon(filepath);
 				}
-
 				resolve();
 			});
 
-			stream.on("error", function (err) {
+			stream.on("error", (err: any) => {
 				console.error("Error reading stream:", err);
-				resolve();
+				reject(err);
 			});
 
-			writeStream.on("error", function (err) {
+			writeStream.on("error", (err: any) => {
 				console.error("Error writing file:", err);
-				resolve();
+				reject(err);
 			});
 		});
 
@@ -722,7 +727,8 @@ export async function downloadFile(
 export async function processFileBlocks(fileAttachedBlocks: Block[]) {
 	await Promise.all(
 		fileAttachedBlocks.map(async (block) => {
-			const fileDetails = (block.NImage || block.File || block.Video || block.NAudio).File;
+			const fileDetails = (block.NImage || block.File || block.Video || block.NAudio)?.File;
+			if (!fileDetails) return null;
 			const expiryTime = fileDetails.ExpiryTime;
 			let url = new URL(fileDetails.Url);
 
@@ -739,14 +745,15 @@ export async function processFileBlocks(fileAttachedBlocks: Block[]) {
 					if (!updatedBlock) {
 						return null;
 					}
-					url = new URL(
-						(
-							updatedBlock.NImage ||
-							updatedBlock.File ||
-							updatedBlock.Video ||
-							updatedBlock.NAudio
-						).File.Url,
-					);
+					const updatedFileDetails = (
+						updatedBlock.NImage ||
+						updatedBlock.File ||
+						updatedBlock.Video ||
+						updatedBlock.NAudio
+					)?.File;
+					if (updatedFileDetails) {
+						url = new URL(updatedFileDetails.Url);
+					}
 				}
 
 				return downloadFile(url); // Download the file
@@ -774,7 +781,7 @@ export async function getDatabase(): Promise<Database> {
 		async (bail) => {
 			try {
 				return (await client.databases.retrieve(
-					params as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+					params as unknown as Parameters<typeof client.databases.retrieve>[0],
 				)) as responses.RetrieveDatabaseResponse;
 			} catch (error: unknown) {
 				if (error instanceof APIResponseError) {
@@ -937,7 +944,7 @@ function _buildBlock(blockObject: responses.BlockObject): Block {
 				};
 				if (blockObject.image.type === "external" && blockObject.image.external) {
 					image.External = { Url: blockObject.image.external.url };
-				} else if (blockObject.image.type === "file" && checkObject.image.file) {
+				} else if (blockObject.image.type === "file" && blockObject.image.file) {
 					image.File = {
 						Type: blockObject.image.type,
 						Url: blockObject.image.file.url,
@@ -1150,7 +1157,7 @@ async function _getTableRows(blockId: string): Promise<TableRow[]> {
 			async (bail) => {
 				try {
 					return (await client.blocks.children.list(
-						params as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+						params as unknown as Parameters<typeof client.blocks.children.list>[0],
 					)) as responses.RetrieveBlockChildrenResponse;
 				} catch (error: unknown) {
 					if (error instanceof APIResponseError) {
@@ -1174,7 +1181,9 @@ async function _getTableRows(blockId: string): Promise<TableRow[]> {
 			break;
 		}
 
-		params["start_cursor"] = res.next_cursor as string;
+		if (res.next_cursor) {
+			params["start_cursor"] = res.next_cursor;
+		}
 	}
 
 	return results.map((blockObject) => {
@@ -1214,7 +1223,7 @@ async function _getColumns(blockId: string): Promise<Column[]> {
 			async (bail) => {
 				try {
 					return (await client.blocks.children.list(
-						params as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+						params as unknown as Parameters<typeof client.blocks.children.list>[0],
 					)) as responses.RetrieveBlockChildrenResponse;
 				} catch (error: unknown) {
 					if (error instanceof APIResponseError) {
@@ -1238,7 +1247,9 @@ async function _getColumns(blockId: string): Promise<Column[]> {
 			break;
 		}
 
-		params["start_cursor"] = res.next_cursor as string;
+		if (res.next_cursor) {
+			params["start_cursor"] = res.next_cursor;
+		}
 	}
 
 	return await Promise.all(
@@ -1267,6 +1278,9 @@ async function _getSyncedBlockChildren(block: Block): Promise<Block[]> {
 		}
 	}
 
+	if (!originalBlock) {
+		return [];
+	}
 	const children = await getAllBlocksByBlockId(originalBlock.Id);
 	return children;
 }
@@ -1415,7 +1429,7 @@ function _buildRichText(richTextObject: responses.RichTextObject): RichText {
 			};
 			mention.Page = reference;
 		} else if (richTextObject.mention.type === "date") {
-			let formatted_date = richTextObject.mention.date?.start
+			const formatted_date = richTextObject.mention.date?.start
 				? richTextObject.mention.date?.end
 					? getFormattedDateWithTime(richTextObject.mention.date?.start) +
 						" to " +

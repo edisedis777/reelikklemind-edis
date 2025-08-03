@@ -256,7 +256,7 @@ export interface RichText {
 	Text?: Text;
 	Annotation: Annotation;
 	PlainText: string;
-	Href?: string;
+	Href?: string | null;
 	Equation?: Equation;
 	Mention?: Mention;
 	InternalHref?: Reference;
@@ -301,8 +301,8 @@ export interface Mention {
 	Type: string;
 	Page?: Reference;
 	DateStr?: string;
-	LinkMention?: LinkMention | undefined;
-	CustomEmoji?: CustomEmojiMention | undefined;
+	LinkMention?: LinkMention;
+	CustomEmoji?: CustomEmojiMention;
 }
 
 export interface LinkMention {

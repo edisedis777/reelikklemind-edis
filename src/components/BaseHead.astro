@@ -29,6 +29,7 @@ const umamiSrc = isBuildOrPreviewMode? (setUmami && TRACKING["umami"]["self-host
 
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no" />
+<meta http-equiv="Permissions-Policy" content="browsing-topics=(), run-ad-auction=(), private-state-token-redemption=(), private-state-token-issuance=(), private-aggregation=(), attribution-reporting=()" />
 {
   theme_config_font_url && (<GoogleFontsOptimizer url={theme_config_font_url}>
     </GoogleFontsOptimizer>)
@@ -131,7 +132,7 @@ const umamiSrc = isBuildOrPreviewMode? (setUmami && TRACKING["umami"]["self-host
   )
 }
 <script data-goatcounter="https://reelikklemind.goatcounter.com/count"
-        async src="//gc.zgo.at/count.js"></script>
+        async src="https://gc.zgo.at/count.js"></script>
 <style>
   @view-transition {
     navigation: auto;

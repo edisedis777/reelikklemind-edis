@@ -1,7 +1,7 @@
 ---
 import { ENABLE_LIGHTBOX } from "@/constants.ts";
 import * as interfaces from "@/lib/interfaces.ts";
-import { getFirstImage } from "@/lib/blog-helpers";
+import { filePath, getFirstImage } from "@/lib/blog-helpers";
 import Caption from "@/components/notion-blocks/Caption.astro";
 
 export interface Props {
@@ -15,11 +15,10 @@ let image = "";
 if (block.NImage?.External) {
 	image = block.NImage.External.Url;
 } else if (block.NImage?.File) {
-	image = block.NImage.File.OptimizedUrl ?? block.NImage.File.Url;
+	image = filePath(new URL(block.NImage.File.OptimizedUrl));
 }
 
-const plainTextCaption =
-	block.NImage?.Caption?.map((richText) => richText.PlainText).join(" ") ?? "";
+const plainTextCaption = block.NImage?.Caption.map((richText) => richText.PlainText).join(" ");
 ---
 
 {
@@ -50,9 +49,7 @@ const plainTextCaption =
 					/>
 				)}
 			</div>
-			{block.NImage?.Caption && (
-				<Caption richTexts={block.NImage.Caption} block={block} as="figcaption" />
-			)}
+			<Caption richTexts={block.NImage.Caption} block={block} as="figcaption" />
 		</figure>
 	)
 }

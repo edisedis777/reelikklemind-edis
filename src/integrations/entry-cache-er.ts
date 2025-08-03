@@ -39,7 +39,6 @@ export default (): AstroIntegration => ({
 					}
 
 					// Add the getPostContentByPostId task
-					console.log("Processing entry:", entry.Slug);
 					const postContentPromise = getPostContentByPostId(entry).then((result) => ({
 						referencesInPage: result.referencesInPage,
 						entryId: entry.PageId,

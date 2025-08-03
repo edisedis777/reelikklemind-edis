@@ -16,11 +16,9 @@
 	"google-search-console-html-tag": "",
 	"socials": {
 		"email": "edisedis@tutanota.com",
-		"github": "",
 		"googlescholar": "",
 		"semanticscholar": "",
-		"dblp": "",
-		"substack": "",
+		"substack": "https://substack.com/@reelikklemind",
 		"facebook": "",
 		"twitter": "https://x.com/reelikklemind",
 		"threads": "",
@@ -28,7 +26,7 @@
 		"mastodon": "",
 		"bluesky": "https://bsky.app/profile/reelikklemind.bsky.social",
 		"calendar": "",
-		"kofi": "",
+		"kofi": "https://ko-fi.com/reelikklemind",
 		"buy-me-a-coffee": "",
 		"this-github-repo": ""
 	},
@@ -118,7 +116,7 @@
 	"heading-blocks": ["heading_1", "heading_2", "heading_3"],
 	"full-preview-collections": ["Stream"],
 	"hide-underscore-slugs-in-lists": true,
-	"home-page-slug": "",
+	"home-page-slug": "home",
 	"all-footnotes-page-slug": "_all-footnotes",
 	"og-setup": {
 		"columns": 1,

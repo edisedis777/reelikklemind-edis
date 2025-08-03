@@ -3,14 +3,13 @@
 /// <reference types="astro/client" />
 
 declare module "@pagefind/default-ui" {
-	class PagefindUI {
+	declare class PagefindUI {
 		constructor(arg: unknown);
 	}
 }
 
 interface ImportMetaEnv {
 	readonly WEBMENTION_API_KEY: string;
-	readonly MODE: string;
 }
 
 interface ImportMeta {

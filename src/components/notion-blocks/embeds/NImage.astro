@@ -15,10 +15,11 @@ let image = "";
 if (block.NImage?.External) {
 	image = block.NImage.External.Url;
 } else if (block.NImage?.File) {
-	image = filePath(new URL(block.NImage.File.OptimizedUrl));
+	image = filePath(new URL(block.NImage.File.OptimizedUrl ?? block.NImage.File.Url));
 }
 
-const plainTextCaption = block.NImage?.Caption.map((richText) => richText.PlainText).join(" ");
+const plainTextCaption =
+	block.NImage?.Caption?.map((richText) => richText.PlainText).join(" ") ?? "";
 ---
 
 {
@@ -49,7 +50,9 @@ const plainTextCaption = block.NImage?.Caption.map((richText) => richText.PlainT
 					/>
 				)}
 			</div>
-			<Caption richTexts={block.NImage.Caption} block={block} as="figcaption" />
+			{block.NImage?.Caption && (
+				<Caption richTexts={block.NImage.Caption} block={block} as="figcaption" />
+			)}
 		</figure>
 	)
 }

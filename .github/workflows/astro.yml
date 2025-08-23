@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: "0 */8 * * *"
+    - cron: "0 23 * * *"
   workflow_dispatch:
 
 permissions:
@@ -35,23 +35,17 @@ jobs:
         with:
           node-version: 21
 
-      # Idea from https://www.voorhoede.nl/en/blog/super-fast-npm-install-on-github-actions/
-      - name: Restore Node Modules Cache
-        id: npm-cache-restore
-        uses: actions/cache/restore@v4
+      - name: Cache Node modules and npm
+        uses: actions/cache@v4
         with:
-          path: ./node_modules
-          key: modules-${{ hashFiles(format('{0}/package-lock.json', env.BUILD_PATH)) }}
-
-      - name: Clear Previous Node Modules Cache (if needed)
-        if: steps.npm-cache-restore.outputs.cache-hit != 'true' && env.DELETE_CACHES_GH_TOKEN != ''
-        run: |
-          gh cache list --key modules- --json key --jq '.[].key' | xargs -I {} gh cache delete {}
-        env:
-          GH_TOKEN: ${{ env.DELETE_CACHES_GH_TOKEN }}
+          path: |
+            ~/.npm
+            node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles(format('{0}/package-lock.json', env.BUILD_PATH)) }}
+          restore-keys: |
+            ${{ runner.os }}-node-
 
       - name: Install dependencies
-        if: steps.npm-cache-restore.outputs.cache-hit != 'true'
         run: npm ci --ignore-scripts
         working-directory: ${{ env.BUILD_PATH }}
 
@@ -94,15 +88,14 @@ jobs:
         if: steps.restore-constants-config.outputs.cache-hit != 'true'
         run: |
           echo "Cached old_constants-config.json is different than current constants-config; trimming tmp (except .gitkeep) and deleting public/notion..."
-          # Insert any additional processing or cleanup commands as needed.
           find tmp -mindepth 1 -not -name '.gitkeep' -exec rm -rf {} +
           rm -rf public/notion
+
       - name: Trim public and tmp files based on cache changes
         env:
           CACHE_HIT: ${{ steps.npm-cache-restore.outputs.cache-hit }}
         run: |
           if [ -f ./old_package.json ]; then
-            # If lastBuildTimestamp has changed, delete everything in tmp except .gitkeep and remove public/notion
             OLD_LAST_BUILD_STORE=$(jq -r '.cacheVersion.lastBuildTimestampStore' ./old_package.json)
             NEW_LAST_BUILD_STORE=$(jq -r '.cacheVersion.lastBuildTimestampStore' ./package.json)
             echo "Old lastBuildTimestampStore: $OLD_LAST_BUILD_STORE"
@@ -113,7 +106,6 @@ jobs:
               rm -rf public/notion
             fi
 
-            # Check tmpJSONCache (original logic)
             OLD_TMPJSON=$(jq -r '.cacheVersion.tmpJSONCache' ./old_package.json)
             NEW_TMPJSON=$(jq -r '.cacheVersion.tmpJSONCache' ./package.json)
             echo "Old tmpJSONCache: $OLD_TMPJSON"
@@ -125,7 +117,6 @@ jobs:
               rm -rf tmp/rss-cache
             fi
 
-            # If tmpHTMLCache has changed, delete tmp/blocks-html-cache and tmp/rss-cache
             OLD_TMPHTML=$(jq -r '.cacheVersion.tmpHTMLCache' ./old_package.json)
             NEW_TMPHTML=$(jq -r '.cacheVersion.tmpHTMLCache' ./package.json)
             echo "Old tmpHTMLCache: $OLD_TMPHTML"
@@ -136,7 +127,6 @@ jobs:
               rm -rf tmp/rss-cache
             fi
 
-            # If tmpOGImagesCache has changed, delete tmp/og-images
             OLD_TMPOG=$(jq -r '.cacheVersion.tmpOGImagesCache' ./old_package.json)
             NEW_TMPOG=$(jq -r '.cacheVersion.tmpOGImagesCache' ./package.json)
             echo "Old tmpOGImagesCache: $OLD_TMPOG"
@@ -146,7 +136,6 @@ jobs:
               rm -rf tmp/og-images
             fi
 
-            # If publicNotion has changed, delete public/notion
             OLD_PUBLIC_NOTION=$(jq -r '.cacheVersion.publicNotion' ./old_package.json)
             NEW_PUBLIC_NOTION=$(jq -r '.cacheVersion.publicNotion' ./package.json)
             echo "Old publicNotion: $OLD_PUBLIC_NOTION"
@@ -166,22 +155,7 @@ jobs:
             fi
           fi
 
-      - name: Set and log environment secrets and variables and then Build with Astro and postbuild for pagefind
-        env:
-          NOTION_API_SECRET: ${{ env.NOTION_API_SECRET }}
-          GITHUB_PAGES: true
-          SITE: ${{ steps.pages.outputs.origin }}
-          BASE: ${{ steps.pages.outputs.base_path }}
-        run: |
-          echo "NOTION_API_SECRET = $NOTION_API_SECRET"
-          echo "GITHUB_PAGES = $GITHUB_PAGES"
-          echo "SITE = $SITE"
-          echo "BASE = $BASE"
-          npx --no-install astro build
-          npx --no-install pagefind --site dist
-        working-directory: ${{ env.BUILD_PATH }}
-
-      - name: Set and log environment secrets and variables and then Build with Astro and postbuild for pagefind
+      - name: Build with Astro and postbuild for pagefind
         env:
           NOTION_API_SECRET: ${{ env.NOTION_API_SECRET }}
           GITHUB_PAGES: true
@@ -221,14 +195,6 @@ jobs:
           gh cache list --key constants-config- --json key --jq '.[].key' | xargs -I {} gh cache delete {}
         env:
           GH_TOKEN: ${{ env.DELETE_CACHES_GH_TOKEN }}
-
-      - name: Save node cache manually
-        if: steps.npm-cache-restore.outputs.cache-hit != 'true'
-        id: npm-cache-save
-        uses: actions/cache/save@v4
-        with:
-          path: ./node_modules
-          key: modules-${{ hashFiles(format('{0}/package-lock.json', env.BUILD_PATH)) }}
 
       - name: Save New `tmp` Cache
         id: cache-tmp-save

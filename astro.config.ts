@@ -34,7 +34,6 @@ import rssContentEnhancer from "./src/integrations/rss-content-enhancer";
 import CSSWriter from "./src/integrations/theme-constants-to-css";
 import createFoldersIfMissing from "./src/integrations/create-folders-if-missing";
 import robotsTxt from "astro-robots-txt";
-import sitemap from "@astrojs/sitemap";
 import config from "./constants-config.json";
 import partytown from "@astrojs/partytown";
 const key_value_from_json = {
@@ -87,7 +86,6 @@ export default defineConfig({
 			},
 		}),
 		robotsTxt(),
-		sitemap(),
 		rssContentEnhancer(),
 		blocksHtmlCacher(),
 		PublicNotionCopier(),

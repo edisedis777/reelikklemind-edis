@@ -3,8 +3,8 @@ import {
 	AppBskyEmbedImages,
 	AppBskyEmbedRecord,
 	AppBskyEmbedRecordWithMedia,
+	type AppBskyFeedDefs,
 	AppBskyEmbedVideo,
-	AppBskyFeedDefs,
 	AtpAgent,
 	RichText,
 } from "@atproto/api";

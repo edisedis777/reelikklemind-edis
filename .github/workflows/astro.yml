@@ -175,7 +175,7 @@ jobs:
           echo "GITHUB_PAGES = $GITHUB_PAGES"
           echo "SITE = $SITE"
           echo "BASE = $BASE"
-          npx --no-install astro build
+          npm run build
           npx --no-install pagefind --site dist
         working-directory: ${{ env.BUILD_PATH }}
 

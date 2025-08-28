@@ -36,6 +36,7 @@ jobs:
           node-version: 21
 
       - name: Cache Node modules and npm
+        id: npm-cache-restore
         uses: actions/cache@v4
         with:
           path: |
@@ -83,6 +84,14 @@ jobs:
         with:
           path: ./constants-config.json
           key: constants-config-${{ hashFiles(format('{0}/constants-config.json', env.BUILD_PATH)) }}
+
+      - name: Restore Cached `buildcache`
+        id: cache-buildcache-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ./buildcache
+          key: buildcache-${{ github.repository_id }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: buildcache-${{ github.repository_id }}-
 
       - name: Process constants-config if cache not hit
         if: steps.restore-constants-config.outputs.cache-hit != 'true'
@@ -209,6 +218,13 @@ jobs:
         with:
           path: ./public
           key: public-webtrotion-${{ github.repository_id }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Save New `buildcache` Cache
+        id: cache-buildcache-save
+        uses: actions/cache/save@v4
+        with:
+          path: ./buildcache
+          key: buildcache-${{ github.repository_id }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Copy package.json to old_package.json
         run: cp ./package.json ./old_package.json
